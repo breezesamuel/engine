@@ -17,6 +17,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 
+pub mod adapter_paging;
+pub use adapter_paging::{
+    salted_adapter_key, AdapterMeta, AdapterPagingError, AdapterPagingRegistry, PageLease,
+    PageState, PagingStats,
+};
+
 const WIRE_MAGIC: [u8; 4] = *b"HKV1";
 const OP_PULL: u8 = 1;
 const OP_PUSH: u8 = 2;
