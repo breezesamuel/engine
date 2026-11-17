@@ -22,6 +22,11 @@ pub use adapter_paging::{
     salted_adapter_key, AdapterMeta, AdapterPagingError, AdapterPagingRegistry, PageLease,
     PageState, PagingStats,
 };
+pub mod composition;
+pub use composition::{
+    ChunkMeta, CompositionDecision, CompositionPlan, CompositionPlanner, CompositionRequest,
+    RecomputeReason,
+};
 
 const WIRE_MAGIC: [u8; 4] = *b"HKV1";
 const OP_PULL: u8 = 1;
