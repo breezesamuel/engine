@@ -1,0 +1,80 @@
+{
+  "schema": "hanzo-kv-fabric/cacheblend-composition-results/v1",
+  "bounty": "hanzoai/engine#98 (Bounty #19, HIP-1345 §2.7)",
+  "pr": "https://github.com/hanzoai/engine/pull/105",
+  "date": "2026-11-18",
+  "host": {
+    "os": "Windows 11",
+    "arch": "windows/amd64",
+    "profile": "release (optimized)"
+  },
+  "workload": {
+    "description": "2-turn RAG prompt with shuffled retrieval order: turn 0 = system(64) + docA(256) + docB(256) + question(64) = 640 tokens; turn 1 = system(64) + docB + docA + docC(256) + question(64) = 896 tokens. docB and docA land in swapped positions on turn 1 — the order violation a strict prefix cache cannot survive.",
+    "tokens_per_doc": 256,
+    "system_tokens": 64,
+    "question_tokens": 64,
+    "chunk_size": 128,
+    "head_window_tokens": 16
+  },
+  "matched_baselines": {
+    "description": "Same two-turn fixture, two cache policies: prefix-only strict cache (engine#51 semantics — reusable only from the first token to the first divergence) vs the composition planner (CacheBlend-style non-prefix reuse with cross-block recomputation).",
+    "prefix_only_strict_cache": {
+      "reusable_tokens": 64,
+      "prompt_tokens": 896,
+      "prefill_tokens": 832,
+      "note": "only the 64-token system prefix survives the docB/docA swap; everything from docB onward must be recomputed"
+    },
+    "composition_planner": {
+      "reuse_decisions": 3,
+      "recompute_decisions": 1,
+      "order_violations": 0,
+      "reuse_detail": [
+        { "chunk": "system", "shift": 0, "window": 0 },
+        { "chunk": "docB", "shift": -256, "window": 16 },
+        { "chunk": "docA", "shift": 256, "window": 16 }
+      ],
+      "recompute_detail": [
+        { "chunk": "docC", "reason": "never_cached" }
+      ],
+      "reusable_tokens": 544,
+      "reusable_multiplier_vs_prefix": 8.5,
+      "total_compute_tokens": 352,
+      "compute_breakdown": "32 head windows (2 x 16) + 256 uncached docC + 64 fresh question"
+    },
+    "claim": "composition planner cuts turn-1 prefill from 832 to 352 tokens (-57.7%) on the same fixture, by reusing swapped-position blocks with a 16-token cross-block fusion window each"
+  },
+  "compute_savings": {
+    "prefix_only_tokens": 832,
+    "composition_tokens": 352,
+    "reduction_pct": 57.7
+  },
+  "hypotheses": [
+    {
+      "id": "C1",
+      "text": "strict prefix caching collapses to system-prompt-only reuse under shuffled retrieval order",
+      "expected_failure_mode": "if the retrieval order is stable, prefix cache retains full turns and this baseline is too strong",
+      "observed": "confirmed: 64/896 reusable (7.1%)"
+    },
+    {
+      "id": "C2",
+      "text": "non-prefix composition reuse restores the majority of cached tokens with small per-chunk fusion windows",
+      "expected_failure_mode": "if window cost scales super-linearly with chunk displacement, net savings shrink",
+      "observed": "confirmed: 544/896 reusable (60.7%), 8.5x the prefix-only baseline, -57.7% compute"
+    },
+    {
+      "id": "C3",
+      "text": "planner never admits an order-violating reuse silently (fail-closed)",
+      "expected_failure_mode": "an unstated order dependency would produce a stale-KV reuse without a recompute decision",
+      "observed": "confirmed: 0 silent violations; the four rejection classes in composition.rs each have a dedicated test"
+    }
+  ],
+  "out_of_scope": [
+    "the actual KV blending math (CacheBlend's selective token recomputation inside fused blocks — attention-side integration belongs to hanzo-engine)",
+    "cross-segment attention routing",
+    "multi-tenant pinning policy under budget pressure",
+    "runtime eviction under memory pressure",
+    "TTFT and answer-quality parity measurement (requires the engine's attention path; this is the planning layer)"
+  ],
+  "raw_command": "cargo run --release --example composition_bench",
+  "replication": "git checkout the PR head; cargo run --release -p hanzo-kv-fabric --example composition_bench"
+}

@@ -1,7 +1,7 @@
 // Copyright 2026 Hanzo AI, Inc.
 // SPDX-License-Identifier: MIT
 
-//! Non-prefix RAG KV composition planning for the KV fabric (HIP-1345 §2.4,
+//! Non-prefix RAG KV composition planning for the KV fabric (HIP-1345 §2.7,
 //! Bounty #19 / engine#98, CacheBlend <https://arxiv.org/abs/2405.16444>).
 //!
 //! Hanzo's prefix cache reuses K/V only when a *common prefix* matches. RAG

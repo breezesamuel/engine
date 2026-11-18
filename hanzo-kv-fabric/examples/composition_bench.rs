@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 //! Non-prefix RAG KV composition demo at the fabric level
-//! (HIP-1345 §2.4, Bounty #19 / engine#98, CacheBlend).
+//! (HIP-1345 §2.7, Bounty #19 / engine#98, CacheBlend).
 //!
 //! Simulates a two-turn RAG session where the retrieved documents SHUFFLE
 //! between turns (docB before docA on turn 1, plus one fresh docC). Strict
@@ -168,5 +168,5 @@ fn main() {
     println!();
     println!("Shuffled documents hit a strict prefix cache at exactly 0 tokens past");
     println!("the system prompt; chunk composition reuses them wherever they land");
-    println!("and pays only a 16-token head window per reused doc (HIP-1345 §2.4).");
+    println!("and pays only a 16-token head window per reused doc (HIP-1345 §2.7).");
 }
