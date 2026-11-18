@@ -17,6 +17,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 
+pub mod residency_scheduler;
+pub use residency_scheduler::{
+    residency_order, RequestOutcome, ResidencyScheduler, ResidencyTier, SchedRequest,
+    ScheduleResult, SchedulerConfig,
+};
 const WIRE_MAGIC: [u8; 4] = *b"HKV1";
 const OP_PULL: u8 = 1;
 const OP_PUSH: u8 = 2;

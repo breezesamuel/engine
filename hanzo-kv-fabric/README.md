@@ -13,3 +13,4 @@ Epoch-fenced KV block ownership directory and framed TCP transport (`HKV1`) for 
 ```bash
 cargo run --release -p hanzo-kv-fabric --example kv_fabric_bench
 ```
+- **`ResidencyScheduler`** (`residency_scheduler` module): KV-residency-aware request scheduling per HIP-1345 §2.3 (Bidaw, engine#94) — separates multi-turn requests by KV residency tier (device → host → SSD), reorders smallest-KV-first within each tier, and simulates TTFT/goodput against a FIFO baseline on a deterministic mixed warm/cold workload. Mechanism 2 (response-predicted eviction) is documented as out-of-scope.

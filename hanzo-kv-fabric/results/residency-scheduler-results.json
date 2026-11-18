@@ -1,0 +1,112 @@
+{
+  "schema": "hanzo-kv-fabric/residency-scheduler-results/v1",
+  "bounty": "hanzoai/engine#94 (Bounty #13, HIP-1345 §2.3)",
+  "pr": "see PR description (residency-scheduler-research branch)",
+  "date": "2026-11-18",
+  "host": {
+    "os": "Windows 11",
+    "arch": "windows/amd64",
+    "profile": "release (optimized)"
+  },
+  "workload": {
+    "description": "24 multi-turn conversational requests, deterministic warm/cold mix: 8 resident (KVs on device), 8 host-memory, 8 SSD-cold; KV footprints ladder 16 MiB..2 GiB (3 cycles), interleaved arrival (tiers cycle SSD/resident/host). Sequential-server simulation: per-request service = tier load latency + prefill compute; TTFT = queue wait + load + prefill.",
+    "requests": 24,
+    "tier_counts": { "resident": 8, "host": 8, "ssd": 8 },
+    "kv_bytes_range": ["16 MiB", "2 GiB"],
+    "config": {
+      "host_load_bps": 20000000000,
+      "ssd_load_bps_scenarios": [2000000000, 500000000],
+      "prefill_ns_per_byte": 1
+    }
+  },
+  "matched_baselines": {
+    "description": "FIFO arrival order (no residency awareness) vs residency order (tier separation resident->host->SSD, smallest-KV-first within tier) — identical workload, identical simulation, only the schedule differs.",
+    "scenario_1_ssd_2gbs": {
+      "fifo": {
+        "mean_ttft_ms": 6381.0,
+        "p50_ttft_ms": 5599.4,
+        "p95_ttft_ms": 12932.7,
+        "max_ttft_ms": 15187.6,
+        "warm_tier_p95_ttft_ms": 15187.6,
+        "ssd_tier_worst_ttft_ms": 11859.0,
+        "goodput_rps": 1.58
+      },
+      "residency": {
+        "mean_ttft_ms": 5595.3,
+        "p50_ttft_ms": 4824.3,
+        "p95_ttft_ms": 11966.3,
+        "max_ttft_ms": 15187.6,
+        "warm_tier_p95_ttft_ms": 8770.3,
+        "ssd_tier_worst_ttft_ms": 15187.6,
+        "goodput_rps": 1.58
+      },
+      "mean_ttft_improvement_x": 1.14,
+      "warm_tier_p95_improvement_x": 1.73,
+      "ordering_cost_ns_per_request": 695
+    },
+    "scenario_2_ssd_500mbs": {
+      "fifo": {
+        "mean_ttft_ms": 9356.9,
+        "p50_ttft_ms": 7889.5,
+        "p95_ttft_ms": 19350.0,
+        "max_ttft_ms": 21604.9,
+        "warm_tier_p95_ttft_ms": 21604.9,
+        "ssd_tier_worst_ttft_ms": 18276.3,
+        "goodput_rps": 1.11
+      },
+      "residency": {
+        "mean_ttft_ms": 6121.7,
+        "p50_ttft_ms": 4824.3,
+        "p95_ttft_ms": 15162.4,
+        "max_ttft_ms": 21604.9,
+        "warm_tier_p95_ttft_ms": 8770.3,
+        "ssd_tier_worst_ttft_ms": 21604.9,
+        "goodput_rps": 1.11
+      },
+      "mean_ttft_improvement_x": 1.53,
+      "warm_tier_p95_improvement_x": 2.46,
+      "ordering_cost_ns_per_request": 283
+    },
+    "consistency_note": "warm-tier p95 is identical across scenarios (8770.3 ms) as it must be: warm tiers never touch the SSD, so their schedule depends only on warm prefill compute. Cross-scenario invariance is a fixture-integrity check.",
+    "claim": "tier separation + size-ranked reordering cuts warm-tier p95 TTFT 1.73x (2 GB/s SSD) to 2.46x (500 MB/s SSD) and mean TTFT 1.14x-1.53x, with goodput unchanged by construction (identical total load bytes). The cold SSD tier absorbs the wait by design: its worst TTFT rises (11.9 s -> 15.2 s / 18.3 s -> 21.6 s) exactly because warm interactive users stop paying for cold loads."
+  },
+  "metric_honesty": {
+    "max_ttft_order_invariant": "On a strictly sequential server the last scheduled request always waits for the whole makespan regardless of order. max/p99 TTFT are therefore order-invariant and are reported as such, not claimed as improvements. The order-sensitive metrics are mean TTFT and per-tier (especially warm-tier) worsts/p95.",
+    "simulation": "Per-tier load latencies are configured rates (host 20 GB/s; SSD 2 GB/s / 500 MB/s), not measured device I/O. Engine integration must replace them with measured Hanzo-hardware rates."
+  },
+  "hypotheses": [
+    {
+      "id": "S1",
+      "text": "FIFO p95/mean TTFT under a mixed warm/cold queue is inflated by cold-load head-of-line blocking",
+      "expected_failure_mode": "if load latencies were uniform across tiers, ordering could not matter and both schedules would coincide",
+      "observed": "confirmed: FIFO warm-tier p95 pays 15.2 s (scenario 1) / 21.6 s (scenario 2) vs residency 8.8 s"
+    },
+    {
+      "id": "S2",
+      "text": "tier separation + size rank reduces mean and warm-tier TTFT with unchanged total load bytes",
+      "expected_failure_mode": "fast-tier-first bias starving cold requests — measured: the cold tier's worst TTFT rises by design (11.9->15.2 s, 18.3->21.6 s); per-tier worsts are committed so the fairness cost is visible, not hidden",
+      "observed": "confirmed: mean 1.14x-1.53x, warm-tier p95 1.73x-2.46x, goodput identical"
+    },
+    {
+      "id": "S3",
+      "text": "the ordering itself costs orders of magnitude less than any real load latency",
+      "expected_failure_mode": "an accidental O(n^2) comparator would show µs+-scale per-request costs",
+      "observed": "confirmed: 283-695 ns/request (stable sort over 24 requests)"
+    }
+  ],
+  "out_of_scope": [
+    "Bidaw mechanism 2 (response-predicted eviction): predicting user access patterns from LLM-generated responses needs response content and a storage trace a scheduling policy does not see",
+    "Bidaw mechanism 3 (selective storage-efficient history caching): footprint-vs-compute balancing across history tensors",
+    "real two-tier I/O: configured bandwidths, not measured device I/O — Hanzo-hardware rerun is the follow-up",
+    "GPU-side batching / continuous batching interplay (bounded sequential server only)",
+    "distributed/Enso gateway routing (Bounty #18) — covered by cloud PR #48 (Preble); this PR is the single-node half",
+    "admission control / backpressure under overload",
+    "hanzoai/engine#56 integration (complement, not included)"
+  ],
+  "upstream_figures_are_not_hanzo_expectations": {
+    "bidaw_paper": "response latency up to 3.58x reduction, throughput up to 1.83x improvement vs SOTA (authors' testbed, FAST '26); two-tier loading costs up to 3.8x latency / 2.0x throughput vs ideal large-memory in their baseline",
+    "stance": "not reproduced on Hanzo hardware; not treated as Hanzo expectations per the bounty's own caveat"
+  },
+  "raw_command": "cargo run --release --example residency_bench",
+  "replication": "git checkout the PR head; cargo run --release -p hanzo-kv-fabric --example residency_bench"
+}
