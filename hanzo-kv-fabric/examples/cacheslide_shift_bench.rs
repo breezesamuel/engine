@@ -41,8 +41,9 @@ fn chain_block_hashes(sequence: &[u32], block_size: usize) -> Vec<u64> {
     sequence
         .chunks(block_size)
         .scan(0u64, |parent, chunk| {
-            *parent = chained_block_hash(*parent, chunk);
-            Some(*parent)
+            let h = chained_block_hash(*parent, chunk);
+            *parent = h;
+            Some(h)
         })
         .collect()
 }
@@ -52,7 +53,7 @@ fn chained_prefix_hits(sequence: &[u32], published: &[u64], block_size: usize) -
     chain_block_hashes(sequence, block_size)
         .into_iter()
         .zip(published.iter().chain(std::iter::repeat(&0)))
-        .filter(|(hash, published_hash)| published_hash != &0 && hash == published_hash)
+        .filter(|(hash, published_hash)| **published_hash != 0u64 && *hash == **published_hash)
         .count()
 }
 

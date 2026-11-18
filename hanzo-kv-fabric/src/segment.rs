@@ -128,7 +128,7 @@ impl SegmentLocation {
 #[derive(Debug, Default)]
 pub struct SegmentDirectory {
     worker_epochs: RwLock<FxHashMap<String, u64>>,
-    segments: RwLock<FxHashMap<(u64, u64), std::collections::HashMap<String, SegmentLocation>>>,
+    segments: RwLock<FxHashMap<(u64, u64), std::collections::HashMap<String, std::collections::BTreeMap<u64, SegmentLocation>>>>,
 }
 
 impl SegmentDirectory {
@@ -214,7 +214,9 @@ impl SegmentDirectory {
         segments
             .entry((meta.cache_salt, meta.segment_hash))
             .or_default()
-            .insert(worker_id.to_string(), loc);
+            .entry(worker_id.to_string())
+            .or_default()
+            .insert(meta.token_offset, loc);
         Ok(())
     }
 
@@ -231,12 +233,14 @@ impl SegmentDirectory {
         let Some(owners) = segments.get_mut(&(cache_salt, segment_hash)) else {
             return Vec::new();
         };
-        owners.retain(|worker_id, loc| {
-            epochs
-                .get(worker_id)
-                .is_some_and(|epoch| loc.epoch >= *epoch)
+        owners.retain(|worker_id, offsets| {
+            let keep = epochs.get(worker_id).is_some_and(|epoch| {
+                offsets.retain(|_, loc| loc.epoch >= *epoch);
+                !offsets.is_empty()
+            });
+            keep
         });
-        let fresh: Vec<SegmentLocation> = owners.values().cloned().collect();
+        let fresh: Vec<SegmentLocation> = owners.values().flat_map(|offsets| offsets.values().cloned()).collect();
         if owners.is_empty() {
             segments.remove(&(cache_salt, segment_hash));
         }
@@ -251,10 +255,8 @@ impl SegmentDirectory {
     fn purge_worker_segments_below_epoch(&self, worker_id: &str, min_epoch: u64) {
         let mut segments = self.segments.write();
         segments.retain(|_, owners| {
-            if let Some(loc) = owners.get(worker_id) {
-                if loc.epoch < min_epoch {
-                    owners.remove(worker_id);
-                }
+            if let Some(offsets) = owners.get_mut(worker_id) {
+                offsets.retain(|_, loc| !(loc.worker_id == worker_id && loc.epoch < min_epoch));
             }
             !owners.is_empty()
         });
@@ -354,13 +356,16 @@ mod tests {
         dir.publish_segment("worker-b", 1, addr, &shifted_m).unwrap();
         let hits = dir.lookup_segments(5, m.segment_hash);
         assert_eq!(hits.len(), 2, "shifted occurrence must hit the same content key");
+        // The directory returns locations sorted by publish-time offset.
+        // Find the shifted one (offset 128, published by worker-b).
         let shifted = hits
             .iter()
             .find(|loc| loc.worker_id == "worker-b")
-            .unwrap();
-        assert_eq!(shifted.position_shift(128), Some(128));
-        assert_eq!(shifted.position_shift(129), Some(129));
-        assert_eq!(shifted.position_shift(0), Some(-128));
+            .expect("worker-b's shifted occurrence must be in the results");
+        assert_eq!(shifted.token_offset, 128, "shifted occurrence must keep its publish offset");
+        assert_eq!(shifted.position_shift(128), Some(0), "reusing at the shifted offset is a zero shift");
+        assert_eq!(shifted.position_shift(129), Some(1), "one token past the shifted start is +1");
+        assert_eq!(shifted.position_shift(0), Some(-128), "the original turn-0 position is -128 relative to the shift");
     }
 
     #[test]
