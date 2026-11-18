@@ -1,0 +1,83 @@
+{
+  "schema": "hanzo-kv-fabric/lora-paging-results/v1",
+  "bounty": "hanzoai/engine#96 (Bounty #15, HIP-1345 §2.4)",
+  "pr": "https://github.com/hanzoai/engine/pull/104",
+  "date": "2026-11-18",
+  "host": {
+    "os": "Windows 11",
+    "arch": "windows/amd64",
+    "profile": "release (optimized)"
+  },
+  "workload": {
+    "tenants": 8,
+    "adapters_per_tenant": 2,
+    "layers": 4,
+    "page_bytes": 4194304,
+    "demand_mib": 256,
+    "budget_mib": 40,
+    "storm_rounds": 32,
+    "lookups_total": 2048,
+    "fixture": "deterministic (PCG-style multiplier stream per layer digest); identical across phases"
+  },
+  "matched_baselines": {
+    "description": "Same fixture, same budget, same storm, two policies: A = unpinned LRU (no tenant pinning, everyone evicts everyone), B = tenant-0 adapters pinned via pin_adapter().",
+    "phase_a_unpinned_lru": {
+      "hits": 0,
+      "misses": 2048,
+      "hit_ratio_pct": 0.0,
+      "evictions": 2038,
+      "note": "shared-budget LRU without tenant pinning: the standing storm thrashes every tenant; a page brought in for lookup i is gone before lookup i+1"
+    },
+    "phase_b_tenant0_pinned": {
+      "hits": 248,
+      "misses": 1800,
+      "evictions": 1800,
+      "pinned_tenant": { "tenant": 0, "calls": 256, "hits": 248, "hit_ratio_pct": 96.9 },
+      "unpinned_tenants": { "calls": 1792, "hits": 0, "hit_ratio_pct": 0.0 },
+      "pinned_pages_surviving": "8/8 still Pinned after the storm",
+      "note": "pinning one tenant's hot adapters makes its pages immortal under the storm; other tenants keep thrashing on the residual budget"
+    },
+    "claim": "tenant pinning converts the pinned tenant from 0.0% to 96.9% hit ratio under a standing eviction storm, at zero additional device budget (pages were already resident between lookups; pinning removes their LRU eviction candidacy)"
+  },
+  "policy_cost": {
+    "resident_hit_ns_per_lookup": 302,
+    "admission_ns_per_lookup": 709,
+    "note": "fabric-level registry policy cost only: hashing, stats deltas, lease state transitions. No device I/O is simulated; the device-side cost belongs to the engine."
+  },
+  "hypotheses": [
+    {
+      "id": "P1",
+      "text": "unpinned LRU under a standing multi-tenant storm saturates at ~0% hit ratio",
+      "expected_failure_mode": "if LRU recency (not budget pressure) dominates, hit ratio stays materially positive",
+      "observed": "confirmed: 0/2048"
+    },
+    {
+      "id": "P2",
+      "text": "tenant pinning lifts the pinned tenant to near-100% hit ratio at unchanged budget",
+      "expected_failure_mode": "if pinning starves its own admissions (pin-all-pages pathology), ratio drops or budget overflows",
+      "observed": "confirmed: 248/256 = 96.9%; residual misses are the first-pass admissions per storm round"
+    },
+    {
+      "id": "P3",
+      "text": "policy-layer cost stays sub-microsecond per lookup",
+      "expected_failure_mode": "salted key computation or stats bookkeeping dominating would push this to µs+",
+      "observed": "confirmed: ~302 ns hit, ~709 ns admission"
+    },
+    {
+      "id": "P4",
+      "text": "salt isolation: a foreign salt cannot resolve a registered adapter",
+      "expected_failure_mode": "name-collision leakage across tenants",
+      "observed": "confirmed: UnknownAdapter error asserted in the bench"
+    }
+  ],
+  "out_of_scope": [
+    "adapter training/fine-tuning lifecycle",
+    "runtime hot-swap of adapter weights into the attention path",
+    "device memory management and device-side I/O (this is a policy layer, not the engine)",
+    "cross-worker replication of paged adapters",
+    "multi-GPU placement and NUMA-aware page ownership",
+    "pin budget negotiation between tenants (a single demo tenant is pinned; a quota arbiter is future work)"
+  ],
+  "raw_command": "cargo run --release --example lora_paging_bench",
+  "replication": "git checkout the PR head; cargo run --release -p hanzo-kv-fabric --example lora_paging_bench"
+}

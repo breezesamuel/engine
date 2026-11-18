@@ -1,7 +1,7 @@
 // Copyright 2026 Hanzo AI, Inc.
 // SPDX-License-Identifier: MIT
 
-//! Multi-tenant LoRA adapter paging for the KV fabric (HIP-1345 §2.3,
+//! Multi-tenant LoRA adapter paging for the KV fabric (HIP-1345 §2.4,
 //! Bounty #15 / engine#96, S-LoRA <https://arxiv.org/abs/2311.03285>).
 //!
 //! Zen serves many fine-tuned LoRA adapters against shared base weights.
