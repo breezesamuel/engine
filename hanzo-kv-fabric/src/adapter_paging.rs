@@ -266,13 +266,14 @@ impl AdapterPagingRegistry {
     ) -> Result<(), AdapterPagingError> {
         let key = salted_adapter_key(adapter_id, cache_salt);
         let mut inner = self.inner.write();
-        let adapter = inner
-            .adapters
-            .remove(&key)
-            .ok_or_else(|| AdapterPagingError::UnknownAdapter {
-                name: adapter_id.to_string(),
-                salt: cache_salt,
-            })?;
+        let adapter =
+            inner
+                .adapters
+                .remove(&key)
+                .ok_or_else(|| AdapterPagingError::UnknownAdapter {
+                    name: adapter_id.to_string(),
+                    salt: cache_salt,
+                })?;
         for layer in 0..adapter.meta.num_layers {
             if let Some(entry) = inner.pages.remove(&(key, layer)) {
                 if entry.state != PageState::Hosted {
@@ -288,17 +289,17 @@ impl AdapterPagingRegistry {
     pub fn pin_adapter(&self, adapter_id: &str, cache_salt: u64) -> Result<(), AdapterPagingError> {
         let key = salted_adapter_key(adapter_id, cache_salt);
         let mut inner = self.inner.write();
-        let num_layers = {
-            let adapter = inner
-                .adapters
-                .get_mut(&key)
-                .ok_or_else(|| AdapterPagingError::UnknownAdapter {
-                    name: adapter_id.to_string(),
-                    salt: cache_salt,
+        let num_layers =
+            {
+                let adapter = inner.adapters.get_mut(&key).ok_or_else(|| {
+                    AdapterPagingError::UnknownAdapter {
+                        name: adapter_id.to_string(),
+                        salt: cache_salt,
+                    }
                 })?;
-            adapter.pinned = true;
-            adapter.meta.num_layers
-        };
+                adapter.pinned = true;
+                adapter.meta.num_layers
+            };
         for layer in 0..num_layers {
             if let Some(entry) = inner.pages.get_mut(&(key, layer)) {
                 if entry.state == PageState::Resident {
@@ -317,17 +318,17 @@ impl AdapterPagingRegistry {
     ) -> Result<(), AdapterPagingError> {
         let key = salted_adapter_key(adapter_id, cache_salt);
         let mut inner = self.inner.write();
-        let num_layers = {
-            let adapter = inner
-                .adapters
-                .get_mut(&key)
-                .ok_or_else(|| AdapterPagingError::UnknownAdapter {
-                    name: adapter_id.to_string(),
-                    salt: cache_salt,
+        let num_layers =
+            {
+                let adapter = inner.adapters.get_mut(&key).ok_or_else(|| {
+                    AdapterPagingError::UnknownAdapter {
+                        name: adapter_id.to_string(),
+                        salt: cache_salt,
+                    }
                 })?;
-            adapter.pinned = false;
-            adapter.meta.num_layers
-        };
+                adapter.pinned = false;
+                adapter.meta.num_layers
+            };
         for layer in 0..num_layers {
             if let Some(entry) = inner.pages.get_mut(&(key, layer)) {
                 if entry.state == PageState::Pinned {
@@ -357,13 +358,14 @@ impl AdapterPagingRegistry {
         let mut inner = self.inner.write();
 
         let pinned = {
-            let adapter = inner
-                .adapters
-                .get(&key)
-                .ok_or_else(|| AdapterPagingError::UnknownAdapter {
-                    name: adapter_id.to_string(),
-                    salt: cache_salt,
-                })?;
+            let adapter =
+                inner
+                    .adapters
+                    .get(&key)
+                    .ok_or_else(|| AdapterPagingError::UnknownAdapter {
+                        name: adapter_id.to_string(),
+                        salt: cache_salt,
+                    })?;
             if layer >= adapter.meta.num_layers {
                 return Err(AdapterPagingError::LayerOutOfRange {
                     name: adapter_id.to_string(),
@@ -500,12 +502,18 @@ mod tests {
         let err = reg
             .register_adapter(meta("", 1, 2), vec![digest(0), digest(1)])
             .unwrap_err();
-        assert!(matches!(err, AdapterPagingError::InvalidAdapterConfig { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::InvalidAdapterConfig { .. }
+        ));
 
         let err = reg
             .register_adapter(meta("zero-layers", 1, 0), vec![])
             .unwrap_err();
-        assert!(matches!(err, AdapterPagingError::InvalidAdapterConfig { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::InvalidAdapterConfig { .. }
+        ));
 
         let err = reg
             .register_adapter(
@@ -516,24 +524,35 @@ mod tests {
                 vec![digest(0)],
             )
             .unwrap_err();
-        assert!(matches!(err, AdapterPagingError::InvalidAdapterConfig { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::InvalidAdapterConfig { .. }
+        ));
 
         let err = reg
             .register_adapter(meta("digest-mismatch", 1, 2), vec![digest(0)])
             .unwrap_err();
-        assert!(matches!(err, AdapterPagingError::InvalidAdapterConfig { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::InvalidAdapterConfig { .. }
+        ));
     }
 
     #[test]
     fn duplicate_registration_is_rejected() {
         let reg = AdapterPagingRegistry::new(8 * PAGE_BYTES);
-        reg.register_adapter(meta("dup", 7, 1), vec![digest(0)]).unwrap();
+        reg.register_adapter(meta("dup", 7, 1), vec![digest(0)])
+            .unwrap();
         let err = reg
             .register_adapter(meta("dup", 7, 1), vec![digest(0)])
             .unwrap_err();
-        assert!(matches!(err, AdapterPagingError::AdapterAlreadyRegistered { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::AdapterAlreadyRegistered { .. }
+        ));
         // Same name, different tenant salt: disjoint keys, both fine.
-        reg.register_adapter(meta("dup", 8, 1), vec![digest(0)]).unwrap();
+        reg.register_adapter(meta("dup", 8, 1), vec![digest(0)])
+            .unwrap();
     }
 
     #[test]
@@ -700,7 +719,10 @@ mod tests {
         reg.get_page("p", 1, 0).unwrap();
         reg.get_page("p", 1, 1).unwrap();
         let err = reg.get_page("q", 2, 0).unwrap_err();
-        assert!(matches!(err, AdapterPagingError::DeviceMemoryExhausted { .. }));
+        assert!(matches!(
+            err,
+            AdapterPagingError::DeviceMemoryExhausted { .. }
+        ));
 
         reg.unpin_adapter("p", 1).unwrap();
         reg.get_page("q", 2, 0).unwrap();
@@ -714,11 +736,8 @@ mod tests {
             .map(|t| (format!("tenant-{t}/lora"), 100 + t))
             .collect();
         for (name, salt) in &tenants {
-            reg.register_adapter(
-                meta(name, *salt, 4),
-                (0..4).map(digest).collect(),
-            )
-            .unwrap();
+            reg.register_adapter(meta(name, *salt, 4), (0..4).map(digest).collect())
+                .unwrap();
         }
 
         std::thread::scope(|scope| {

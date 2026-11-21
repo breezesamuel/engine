@@ -78,10 +78,7 @@ fn register_all(registry: &AdapterPagingRegistry) {
 /// One full sweep of every tenant over every adapter layer, bucketing each
 /// lookup into hit/miss (via stats deltas) and accumulating policy-layer
 /// latency per bucket.
-fn storm(
-    registry: &AdapterPagingRegistry,
-    rounds: usize,
-) -> (u64, u64, u128, u128, Vec<u64>) {
+fn storm(registry: &AdapterPagingRegistry, rounds: usize) -> (u64, u64, u128, u128, Vec<u64>) {
     let mut hits_total = 0u64;
     let mut misses_total = 0u64;
     let mut hit_ns = 0u128;
@@ -149,7 +146,10 @@ fn main() {
     // Phase B: pin the demo tenant's adapters, then re-run the storm.
     for adapter in 0..ADAPTERS_PER_TENANT {
         registry
-            .pin_adapter(&adapter_name(PINNED_TENANT, adapter), tenant_salt(PINNED_TENANT))
+            .pin_adapter(
+                &adapter_name(PINNED_TENANT, adapter),
+                tenant_salt(PINNED_TENANT),
+            )
             .unwrap();
     }
     let evictions_before_b = registry.stats().evictions;
@@ -179,11 +179,19 @@ fn main() {
     );
     println!(
         "policy cost, resident hit   : ~{} ns/lookup",
-        if hits_a > 0 { hit_ns_a / hits_a as u128 } else { hit_ns_b / hits_b.max(1) as u128 }
+        if hits_a > 0 {
+            hit_ns_a / hits_a as u128
+        } else {
+            hit_ns_b / hits_b.max(1) as u128
+        }
     );
     println!(
         "policy cost, admission      : ~{} ns/lookup",
-        if misses_a > 0 { miss_ns_a / misses_a as u128 } else { miss_ns_b / misses_b.max(1) as u128 }
+        if misses_a > 0 {
+            miss_ns_a / misses_a as u128
+        } else {
+            miss_ns_b / misses_b.max(1) as u128
+        }
     );
 
     // Pinned survival check: every pinned page is still resident (and
@@ -192,7 +200,11 @@ fn main() {
     for adapter in 0..ADAPTERS_PER_TENANT {
         for layer in 0..LAYERS {
             let lease = registry
-                .get_page(&adapter_name(PINNED_TENANT, adapter), tenant_salt(PINNED_TENANT), layer)
+                .get_page(
+                    &adapter_name(PINNED_TENANT, adapter),
+                    tenant_salt(PINNED_TENANT),
+                    layer,
+                )
                 .unwrap();
             if lease.state == hanzo_kv_fabric::adapter_paging::PageState::Pinned {
                 pinned_survivors += 1;
