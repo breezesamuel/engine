@@ -1,6 +1,6 @@
 {
   "schema": "hanzo-kv-fabric/cacheblend-composition-results/v1",
-  "bounty": "hanzoai/engine#98 (Bounty #19, HIP-1345 §2.7)",
+  "bounty": "hanzoai/engine#90 (Bounty #19, HIP-1345 §2.7)",
   "pr": "https://github.com/hanzoai/engine/pull/105",
   "date": "2026-11-18",
   "host": {

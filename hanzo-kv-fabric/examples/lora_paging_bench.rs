@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 //! Multi-tenant LoRA adapter paging demo at the fabric level
-//! (HIP-1345 §2.4, Bounty #15 / engine#96, S-LoRA).
+//! (HIP-1345 §2.4, Bounty #15 / engine#88, S-LoRA).
 //!
 //! Simulates 8 tenants x 2 adapters x 4 layers of 4 MiB pages (256 MiB of
 //! demand) competing for a 40 MiB device budget — a standing eviction

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 //! Non-prefix RAG KV composition demo at the fabric level
-//! (HIP-1345 §2.7, Bounty #19 / engine#98, CacheBlend).
+//! (HIP-1345 §2.7, Bounty #19 / engine#90, CacheBlend).
 //!
 //! Simulates a two-turn RAG session where the retrieved documents SHUFFLE
 //! between turns (docB before docA on turn 1, plus one fresh docC). Strict
@@ -130,8 +130,12 @@ fn main() {
     let fresh_question = QUESTION_TOKENS; // uncovered range: caller prefills
     let composition_compute = window_tokens + uncached_doc_tokens + fresh_question;
 
-    println!("composition planner           : {} reuse, {} recompute, order_violations {}",
-        reused.len(), recomputed.len(), plan.order_violations);
+    println!(
+        "composition planner           : {} reuse, {} recompute, order_violations {}",
+        reused.len(),
+        recomputed.len(),
+        plan.order_violations
+    );
     for (hash, shift, window) in &reused {
         let tag = ["system", "docA", "docB", "docC"]
             .iter()

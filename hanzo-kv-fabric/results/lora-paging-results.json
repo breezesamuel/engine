@@ -1,6 +1,6 @@
 {
   "schema": "hanzo-kv-fabric/lora-paging-results/v1",
-  "bounty": "hanzoai/engine#96 (Bounty #15, HIP-1345 §2.4)",
+  "bounty": "hanzoai/engine#88 (Bounty #15, HIP-1345 §2.4)",
   "pr": "https://github.com/hanzoai/engine/pull/104",
   "date": "2026-11-18",
   "host": {

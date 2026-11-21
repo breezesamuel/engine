@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 //! Non-prefix RAG KV composition planning for the KV fabric (HIP-1345 §2.7,
-//! Bounty #19 / engine#98, CacheBlend <https://arxiv.org/abs/2405.16444>).
+//! Bounty #19 / engine#90, CacheBlend <https://arxiv.org/abs/2405.16444>).
 //!
 //! Hanzo's prefix cache reuses K/V only when a *common prefix* matches. RAG
 //! workloads break that model: retrieved documents land at different prompt
@@ -197,18 +197,18 @@ impl CompositionPlanner {
                 continue;
             }
 
-            let position_shift = match self.safe_shift(meta.published_offset, request.current_offset)
-            {
-                Some(shift) => shift,
-                None => {
-                    recompute_tokens += meta.num_tokens;
-                    decisions.push(CompositionDecision::Recompute {
-                        chunk_hash: request.chunk_hash,
-                        reason: RecomputeReason::OffsetOverflow,
-                    });
-                    continue;
-                }
-            };
+            let position_shift =
+                match self.safe_shift(meta.published_offset, request.current_offset) {
+                    Some(shift) => shift,
+                    None => {
+                        recompute_tokens += meta.num_tokens;
+                        decisions.push(CompositionDecision::Recompute {
+                            chunk_hash: request.chunk_hash,
+                            reason: RecomputeReason::OffsetOverflow,
+                        });
+                        continue;
+                    }
+                };
 
             let window = self.window_for(request, meta.num_tokens);
             reusable_tokens += meta.num_tokens - u64::from(window);
@@ -241,9 +241,7 @@ impl CompositionPlanner {
         let requested = request
             .recompute_prefix_tokens
             .unwrap_or(self.default_recompute_window);
-        u32::try_from(num_tokens)
-            .unwrap_or(u32::MAX)
-            .min(requested)
+        u32::try_from(num_tokens).unwrap_or(u32::MAX).min(requested)
     }
 }
 
@@ -274,11 +272,7 @@ mod tests {
     fn all_present_yields_boundary_only_recompute() {
         let planner = CompositionPlanner::new(4);
         let chunks = vec![chunk(1, 0, 100), chunk(2, 100, 100), chunk(3, 200, 100)];
-        let requests = vec![
-            request(1, 128),
-            request(2, 256),
-            request(3, 384),
-        ];
+        let requests = vec![request(1, 128), request(2, 256), request(3, 384)];
 
         let plan = planner.plan(&chunks, &requests);
         assert_eq!(plan.decisions.len(), 3);
@@ -290,7 +284,8 @@ mod tests {
                     ..
                 } => {
                     assert_eq!(*recompute_window, 4, "default window applies");
-                    let expected_shift = requests[i].current_offset as i64 - chunks[i].published_offset as i64;
+                    let expected_shift =
+                        requests[i].current_offset as i64 - chunks[i].published_offset as i64;
                     assert_eq!(*position_shift, expected_shift);
                 }
                 other => panic!("expected reuse, got {other:?}"),
@@ -369,7 +364,10 @@ mod tests {
         let planner = CompositionPlanner::new(4);
         let chunks = vec![chunk(5, 0, 100), chunk(5, 0, 100)];
         let plan = planner.plan(&chunks, &[request(5, 10)]);
-        assert!(matches!(plan.decisions[0], CompositionDecision::Reuse { .. }));
+        assert!(matches!(
+            plan.decisions[0],
+            CompositionDecision::Reuse { .. }
+        ));
     }
 
     #[test]
@@ -384,7 +382,10 @@ mod tests {
             } => {}
             other => panic!("expected recompute, got {other:?}"),
         }
-        assert_eq!(plan.recompute_tokens, 100, "rejected chunk is fully charged");
+        assert_eq!(
+            plan.recompute_tokens, 100,
+            "rejected chunk is fully charged"
+        );
     }
 
     #[test]
@@ -393,12 +394,17 @@ mod tests {
         let chunks = vec![chunk(1, 0, 16)];
         let plan = planner.plan(&chunks, &[request(1, 0)]);
         match &plan.decisions[0] {
-            CompositionDecision::Reuse { recompute_window, .. } => {
+            CompositionDecision::Reuse {
+                recompute_window, ..
+            } => {
                 assert_eq!(*recompute_window, 16, "window never exceeds the chunk");
             }
             other => panic!("expected reuse, got {other:?}"),
         }
-        assert_eq!(plan.reusable_tokens, 0, "fully-windowed chunk reuses nothing");
+        assert_eq!(
+            plan.reusable_tokens, 0,
+            "fully-windowed chunk reuses nothing"
+        );
         assert_eq!(plan.recompute_tokens, 16);
     }
 
@@ -413,7 +419,9 @@ mod tests {
         };
         let plan = planner.plan(&chunks, &[req]);
         match &plan.decisions[0] {
-            CompositionDecision::Reuse { recompute_window, .. } => assert_eq!(*recompute_window, 2),
+            CompositionDecision::Reuse {
+                recompute_window, ..
+            } => assert_eq!(*recompute_window, 2),
             other => panic!("expected reuse, got {other:?}"),
         }
     }
@@ -436,10 +444,10 @@ mod tests {
         let planner = CompositionPlanner::new(8);
         let chunks = vec![chunk(1, 0, 256), chunk(2, 256, 256), chunk(3, 512, 256)];
         let requests = vec![
-            request(1, 0),    // reuse
-            request(2, 300),  // reuse
-            request(999, 0),  // unknown → not counted (caller prefills)
-            request(3, 600),  // reuse
+            request(1, 0),   // reuse
+            request(2, 300), // reuse
+            request(999, 0), // unknown → not counted (caller prefills)
+            request(3, 600), // reuse
         ];
         let plan = planner.plan(&chunks, &requests);
         let reuse_count = plan
